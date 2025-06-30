@@ -49,8 +49,12 @@ if file and uploaded_images:
                 draw = ImageDraw.Draw(img)
                 W, H = img.size
 
-                w1, h1 = draw.textsize(text1, font=font)
-                w2, h2 = draw.textsize(text2, font=font)
+                # Use font.getbbox() to get text dimensions
+                bbox1 = font.getbbox(text1)
+                w1, h1 = bbox1[2] - bbox1[0], bbox1[3] - bbox1[1]
+
+                bbox2 = font.getbbox(text2)
+                w2, h2 = bbox2[2] - bbox2[0], bbox2[3] - bbox2[1]
 
                 draw.text(((W - w1) / 2, H * 0.7), text1, fill='white', font=font)
                 draw.text(((W - w2) / 2, H * 0.8), text2, fill='white', font=font)
