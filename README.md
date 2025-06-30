@@ -13,3 +13,8 @@ This is a simple desktop tool that lets you add text captions to images in bulk 
 2. Install dependencies:
    ```bash
    pip install -r requirements.txt
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
+
