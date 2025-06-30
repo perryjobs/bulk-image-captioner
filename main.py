@@ -4,7 +4,7 @@ from PIL import Image, ImageDraw, ImageFont
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
-FONT_PATH = "arial.ttf"
+FONT_PATH = "font/arial.ttf"
 FONT_SIZE = 40
 
 class BulkImageCaptionApp:
