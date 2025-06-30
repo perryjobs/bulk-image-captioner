@@ -71,10 +71,11 @@ class BulkImageCaptionApp:
             return
 
         try:
-            font = ImageFont.truetype(FONT_PATH, FONT_SIZE)
-        except:
-            messagebox.showerror("Error", f"Font not found: {FONT_PATH}")
-            return
+    font = ImageFont.truetype(FONT_PATH, FONT_SIZE)
+except Exception as e:
+    messagebox.showerror("Error", f"Font not found: {FONT_PATH}\n{e}")
+    return
+
 
         for _, row in df.iterrows():
             try:
