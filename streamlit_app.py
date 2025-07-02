@@ -82,6 +82,7 @@ if file and uploaded_images:
             df = pd.read_csv(file)
         else:
             df = pd.read_excel(file)
+            df = df.fillna("")  # Fix NaN issues
 
         if 'Image Filename' not in df.columns:
             st.error("❌ Missing column: 'Image Filename'")
