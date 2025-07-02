@@ -34,7 +34,7 @@ show_previews = st.checkbox("👁 Show Previews", True)
 enable_download = st.checkbox("💾 Enable ZIP Download", True)
 
 # === Auto-Fit Text into Box (Wrapped) ===
-def wrap_text_to_box(draw, font_path, box_width, box_height, raw_lines, max_font=MAX_FONT_SIZE, min_font=MIN_FONT_SIZE):
+def wrap_text_to_box(draw, font_path, box_width, box_height, raw_lines, max_font=120, min_font=10):
     for font_size in range(max_font, min_font - 1, -2):
         try:
             font = ImageFont.truetype(font_path, font_size)
@@ -46,13 +46,14 @@ def wrap_text_to_box(draw, font_path, box_width, box_height, raw_lines, max_font
         max_line_width = 0
         line_spacing = 10
 
+        # Wrap each raw line individually into one or more shorter lines
         for raw_line in raw_lines:
             if not raw_line.strip():
                 continue
             words = raw_line.strip().split()
             current_line = ""
             for word in words:
-                test_line = current_line + " " + word if current_line else word
+                test_line = f"{current_line} {word}".strip()
                 if font.getlength(test_line) <= box_width:
                     current_line = test_line
                 else:
@@ -65,10 +66,13 @@ def wrap_text_to_box(draw, font_path, box_width, box_height, raw_lines, max_font
                 total_height += font.getbbox(current_line)[3] - font.getbbox(current_line)[1] + line_spacing
                 max_line_width = max(max_line_width, font.getlength(current_line))
 
+        # Check if wrapped text fits in the box
         if total_height <= box_height and max_line_width <= box_width:
             return font, wrapped_lines
 
-    return font, wrapped_lines  # fallback
+    # If it doesn't fit, return smallest font
+    return font, wrapped_lines
+
 
 # === Main Logic ===
 if file and uploaded_images:
