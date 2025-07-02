@@ -80,7 +80,15 @@ if file and uploaded_images:
                 image_counts[image_name] = image_counts.get(image_name, 0) + 1
                 suffix = f"_{image_counts[image_name]}" if image_counts[image_name] > 1 else ""
 
-                text_lines = [str(row.get('Text Line 1', '')), str(row.get('Text Line 2', ''))]
+                text_lines = [
+    str(row.get('Text Line 1', '')),
+    str(row.get('Text Line 2', '')),
+    str(row.get('Text Line 3', '')),
+    str(row.get('Text Line 4', '')),
+]
+# Remove empty lines
+text_lines = [line for line in text_lines if line.strip()]
+
                 img = Image.open(uploaded_image_dict[image_name]).convert("RGBA")
                 W, H = img.size
                 draw = ImageDraw.Draw(img)
