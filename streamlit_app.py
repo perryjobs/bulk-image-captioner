@@ -7,112 +7,111 @@ import streamlit as st
 
 # Constants
 FONT_PATH = "font/arial.ttf"
-DEFAULT_FONT_RATIO = 0.05  # 5% of image height
+MAX_FONT_SIZE = 100
+MIN_FONT_SIZE = 10
 
-st.set_page_config(page_title="Bulk Image Captioner", layout="centered")
-st.title("🖼️ Bulk Image Captioner")
+st.set_page_config(page_title="Smart Image Captioner", layout="centered")
+st.title("🤖 Auto-Fit Image Captioner")
 
-st.write("Upload your caption file and images. We'll overlay the text and let you preview and/or download the results.")
+st.write("Upload your caption file and images. The app will auto-fit captions into the image's center region.")
 
-# === Uploads ===
+# Uploads
 file = st.file_uploader("📄 Upload Excel or CSV", type=["csv", "xlsx"])
 uploaded_images = st.file_uploader("🖼️ Upload Images", accept_multiple_files=True, type=["jpg", "jpeg", "png"])
 
-# === Global Options ===
 show_previews = st.checkbox("👁 Show image previews", value=True)
-enable_download = st.checkbox("💾 Enable download of captioned images", value=True)
-text_alignment = st.selectbox("📍 Text vertical position", ["Top", "Middle", "Bottom"])
-font_color = st.color_picker("🎨 Pick font color", "#FFFFFF")  # Default: white
+enable_download = st.checkbox("💾 Enable download", value=True)
+font_color = st.color_picker("🎨 Font color", "#FFFFFF")  # white
+
+# Helper: Auto-fit font inside a given box
+def get_fitting_font(text_lines, draw, box_width, box_height):
+    for font_size in range(MAX_FONT_SIZE, MIN_FONT_SIZE - 1, -1):
+        try:
+            font = ImageFont.truetype(FONT_PATH, font_size)
+        except:
+            font = ImageFont.load_default()
+
+        total_height = 0
+        max_width = 0
+        for line in text_lines:
+            bbox = font.getbbox(line)
+            line_width = bbox[2] - bbox[0]
+            line_height = bbox[3] - bbox[1]
+            total_height += line_height + 10
+            max_width = max(max_width, line_width)
+
+        if total_height <= box_height and max_width <= box_width:
+            return font
+    return ImageFont.load_default()
 
 if file and uploaded_images:
     try:
         # Load caption file
-        if file.name.endswith(".csv"):
-            df = pd.read_csv(file)
-        else:
-            df = pd.read_excel(file)
+        df = pd.read_csv(file) if file.name.endswith(".csv") else pd.read_excel(file)
 
         if 'Image Filename' not in df.columns:
-            st.error("❌ Your file must contain a column named 'Image Filename'")
+            st.error("❌ 'Image Filename' column is missing")
             st.stop()
 
-        # Preload uploaded images into dict
-        uploaded_image_dict = {img.name: img for img in uploaded_images}
+        # Load images to dict
+        image_map = {img.name: img for img in uploaded_images}
         output_zip = io.BytesIO()
+        image_counts = {}
 
         with zipfile.ZipFile(output_zip, 'w') as zipf:
-            image_counts = {}  # Track versioned outputs
-
             for idx, row in df.iterrows():
-                image_name = row['Image Filename']
-                if image_name not in uploaded_image_dict:
-                    st.warning(f"⚠️ Image not found: {image_name}")
+                img_name = row['Image Filename']
+                if img_name not in image_map:
                     continue
 
-                # Track usage count for renaming
-                image_counts[image_name] = image_counts.get(image_name, 0) + 1
-                version_suffix = f"_{image_counts[image_name]}" if image_counts[image_name] > 1 else ""
-
-                # Get text
                 text1 = str(row.get('Text Line 1', ''))
                 text2 = str(row.get('Text Line 2', ''))
 
-                # Load image
-                img = Image.open(uploaded_image_dict[image_name]).convert("RGBA")
+                image_counts[img_name] = image_counts.get(img_name, 0) + 1
+                suffix = f"_{image_counts[img_name]}" if image_counts[img_name] > 1 else ""
+
+                img = Image.open(image_map[img_name]).convert("RGBA")
                 draw = ImageDraw.Draw(img)
                 W, H = img.size
 
-                # Font size recommendation
-                recommended_font_size = int(H * DEFAULT_FONT_RATIO)
-                user_font_size = st.slider(
-                    f"🔤 Font size for {image_name} ({W}x{H}) use #{image_counts[image_name]}",
-                    10, int(H * 0.2), recommended_font_size, key=f"{image_name}_{idx}"
-                )
+                # Default centered box (60% width/height)
+                box_x0 = int(W * 0.2)
+                box_y0 = int(H * 0.35)
+                box_x1 = int(W * 0.8)
+                box_y1 = int(H * 0.65)
+                box_width = box_x1 - box_x0
+                box_height = box_y1 - box_y0
 
-                # Load font
-                try:
-                    font = ImageFont.truetype(FONT_PATH, user_font_size)
-                except:
-                    font = ImageFont.load_default()
+                # Auto-fit font
+                font = get_fitting_font([text1, text2], draw, box_width, box_height)
 
-                # Measure text
+                # Measure again to center inside box
                 bbox1 = font.getbbox(text1)
                 w1, h1 = bbox1[2] - bbox1[0], bbox1[3] - bbox1[1]
 
                 bbox2 = font.getbbox(text2)
                 w2, h2 = bbox2[2] - bbox2[0], bbox2[3] - bbox2[1]
 
-                # Vertical alignment
-                if text_alignment == "Top":
-                    y1 = H * 0.05
-                    y2 = y1 + h1 + 10
-                elif text_alignment == "Bottom":
-                    y2 = H * 0.95 - h2
-                    y1 = y2 - h1 - 10
-                else:  # Middle
-                    total_height = h1 + h2 + 10
-                    y1 = (H - total_height) / 2
-                    y2 = y1 + h1 + 10
+                total_height = h1 + h2 + 10
+                y_start = box_y0 + (box_height - total_height) / 2
 
-                # Draw text centered horizontally
-                draw.text(((W - w1) / 2, y1), text1, fill=font_color, font=font)
-                draw.text(((W - w2) / 2, y2), text2, fill=font_color, font=font)
+                draw.text((box_x0 + (box_width - w1) / 2, y_start), text1, fill=font_color, font=font)
+                draw.text((box_x0 + (box_width - w2) / 2, y_start + h1 + 10), text2, fill=font_color, font=font)
 
-                # === Show Preview ===
+                # Preview
                 if show_previews:
-                    st.image(img, caption=f"{image_name}{version_suffix}", use_column_width=True)
+                    st.image(img, caption=f"{img_name}{suffix}", use_column_width=True)
 
-                # === Save Image ===
+                # Save if enabled
                 if enable_download:
-                    output_name = os.path.splitext(image_name)[0] + f"{version_suffix}.png"
+                    output_name = os.path.splitext(img_name)[0] + f"{suffix}.png"
                     img_bytes = io.BytesIO()
                     img.save(img_bytes, format="PNG")
                     zipf.writestr(output_name, img_bytes.getvalue())
 
-        # === Download ZIP ===
         if enable_download:
-            st.success("✅ All images processed!")
-            st.download_button("📥 Download All Images (.zip)", output_zip.getvalue(), file_name="captioned_images.zip")
+            st.success("✅ Done!")
+            st.download_button("📥 Download ZIP", data=output_zip.getvalue(), file_name="captioned_images.zip")
 
     except Exception as e:
-        st.error(f"❌ Something went wrong:\n\n{e}")
+        st.error(f"Something went wrong:\n\n{e}")
