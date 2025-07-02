@@ -153,7 +153,7 @@ if file and uploaded_images:
                     y_cursor += line_heights[i] + line_spacing
 
                 if show_previews:
-    st.image(img, caption=f"{img_name}{suffix}", use_column_width=True)
+                    st.image(img, caption=f"{img_name}{suffix}", use_column_width=True)
 
                 if enable_download:
                     outname = os.path.splitext(img_name)[0] + f"{suffix}.png"
