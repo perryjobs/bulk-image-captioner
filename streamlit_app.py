@@ -11,11 +11,8 @@ LINE_SPACING = 10
 # ── PAGE SETUP ──────────────────────────────────────────────
 st.set_page_config(page_title="Bulk Captioner", layout="wide")
 st.title("🖼️ Bulk Image Captioner")
-st.write(
-    "Upload a CSV/Excel file + matching images. Download all captioned images as a ZIP."
-)
 
-# ── CUSTOM HOMEPAGE FOR MOBILE ───────────────────────────────
+# ── HOMEPAGE ────────────────────────────────────────────────
 with st.expander("📘 How This Works", expanded=True):
     st.markdown("""
     **👋 Welcome to Bulk Image Captioner!**
@@ -25,24 +22,22 @@ with st.expander("📘 How This Works", expanded=True):
     **Steps:**
     1. Upload your caption file
     2. Upload matching images (JPEG or PNG)
-    3. Use the sidebar to set fonts, colors, and overlay box settings
+    3. Use the sidebar to customize fonts, overlay box, and colors
     4. Preview & download your captioned images in a ZIP file
 
-    > ✅ Ideal for flyers, event posters, batch quotes, and branding images.
-
-    ---
+    > ✅ Ideal for event flyers, motivational quotes, social content, and more!
     """)
 
+# ── FILE UPLOADS ─────────────────────────────────────────────
 st.subheader("📤 Upload Your Files")
 cap_file = st.file_uploader("📝 Caption File (.csv or .xlsx)", type=["csv", "xlsx"])
 uploaded_images = st.file_uploader("🖼️ Image Files (JPG/PNG)", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
 
-# Show reminder if missing
-if not cap_file or not uploaded_images:
-    st.warning("⏳ Upload both a caption file and matching images to begin...")
+# ── START OVER ──────────────────────────────────────────────
+if st.button("🔄 Start Over"):
+    st.experimental_rerun()
 
-
-# ── SIDEBAR : Font, Overlay, Global Box ─────────────────────
+# ── SIDEBAR SETTINGS ────────────────────────────────────────
 with st.sidebar:
     st.header("🖋 Font & Text")
     font_files = glob.glob("font/*.ttf") + glob.glob("font/*.otf")
@@ -74,7 +69,12 @@ with st.sidebar:
     zip_out   = st.checkbox("💾 Enable ZIP Download", True)
     max_previews = st.number_input("Max Image Previews (0=all)", 0, 100, 20)
 
-# ── TEXT WRAP ────────────────────────────────────────────────
+# ── NO FILES YET? STOP ──────────────────────────────────────
+if not cap_file or not uploaded_images:
+    st.warning("⏳ Upload both a caption file and matching images to begin...")
+    st.stop()
+
+# ── TEXT WRAP LOGIC ─────────────────────────────────────────
 def wrap_and_fit(draw, font_path, box_w, box_h, lines,
                  max_sz=MAX_FONT_SIZE, min_sz=MIN_FONT_SIZE):
     for sz in range(max_sz, min_sz - 1, -2):
@@ -103,98 +103,99 @@ def wrap_and_fit(draw, font_path, box_w, box_h, lines,
 
         if wrapped and tot_h-LINE_SPACING <= box_h and max_w <= box_w:
             return fnt, wrapped
-    return fnt, wrapped  # fallback
+    return fnt, wrapped
 
-# ── MAIN ─────────────────────────────────────────────────────
-if cap_file and uploaded_images:
-    try:
-        df = (pd.read_csv(cap_file) if cap_file.name.endswith(".csv")
-              else pd.read_excel(cap_file)).fillna("")
+# ── MAIN PROCESSING ─────────────────────────────────────────
+try:
+    df = (pd.read_csv(cap_file) if cap_file.name.endswith(".csv")
+          else pd.read_excel(cap_file)).fillna("")
 
-        if "Image Filename" not in df.columns:
-            st.error("Column **Image Filename** missing.")
-            st.stop()
+    if "Image Filename" not in df.columns:
+        st.error("Column **Image Filename** missing.")
+        st.stop()
 
-        img_dict   = {img.name: img for img in uploaded_images}
-        zip_buffer = io.BytesIO()
-        reuse_cnt  = {}
-        shown      = 0
+    # Map image names, ignore case
+    img_dict = {img.name.lower(): img for img in uploaded_images}
+    zip_buffer = io.BytesIO()
+    reuse_cnt  = {}
+    shown      = 0
 
-        for idx, row in df.iterrows():
-            img_name = row["Image Filename"]
-            if img_name not in img_dict:
-                st.warning(f"⚠ Image not uploaded: {img_name}")
-                continue
+    # Progress bar
+    progress = st.progress(0)
+    total = len(df)
 
-            # Caption lines
-            txt_lines = [str(row.get(f"Text Line {n}", "")) for n in range(1, 5)]
-            txt_lines = [t for t in txt_lines if t.strip()]
+    for idx, row in df.iterrows():
+        img_name = row["Image Filename"]
+        img_key  = img_name.lower()
 
-            # Open image
-            im  = Image.open(img_dict[img_name]).convert("RGBA")
-            W, H = im.size
-            key  = f"{img_name}_{idx}"  # unique per row
+        progress.progress((idx + 1) / total)
 
-            # Box size / offset
-            if use_global_box:
-                box_w, box_h = g_box_w, g_box_h
-                off_x, off_y = g_off_x, g_off_y
-            else:
-                st.markdown(f"#### Box for **{img_name}** (row {idx})")
-                col1, col2 = st.columns(2)
-                box_w = col1.number_input("Width", 10, W, 400, key=f"bw_{key}")
-                box_h = col2.number_input("Height", 10, H, 200, key=f"bh_{key}")
-                col3, col4 = st.columns(2)
-                off_x = col3.number_input("Offset X", -W, W, 0, key=f"ox_{key}")
-                off_y = col4.number_input("Offset Y", -H, H, 0, key=f"oy_{key}")
+        if img_key not in img_dict:
+            st.warning(f"⚠ Image not uploaded: {img_name}")
+            continue
 
-            box_x = (W - box_w) // 2 + off_x
-            box_y = (H - box_h) // 2 + off_y
+        txt_lines = [str(row.get(f"Text Line {n}", "")) for n in range(1, 5)]
+        txt_lines = [t for t in txt_lines if t.strip()]
 
-            # Overlay box
-            overlay = Image.new("RGBA", im.size, (0, 0, 0, 0))
-            odraw   = ImageDraw.Draw(overlay)
-            odraw.rectangle(
-                [(box_x, box_y), (box_x+box_w, box_y+box_h)],
-                fill=(*ImageColor.getrgb(fill_color), fill_alpha),
-                outline=(*ImageColor.getrgb(outline_color), 255),
-                width=outline_width,
-            )
-            im = Image.alpha_composite(im, overlay)
-            draw = ImageDraw.Draw(im)
+        im = Image.open(img_dict[img_key]).convert("RGBA")
+        W, H = im.size
+        key = f"{img_name}_{idx}"
 
-            # Fit text
-            base_font, wrapped = wrap_and_fit(
-                draw, FONT_PATH, box_w, box_h, txt_lines, MAX_FONT_SIZE
-            )
-            scaled_sz = max(MIN_FONT_SIZE, int(base_font.size * font_scale / 100))
-            font, wrapped = wrap_and_fit(
-                draw, FONT_PATH, box_w, box_h, txt_lines, scaled_sz
-            )
+        if use_global_box:
+            box_w, box_h = g_box_w, g_box_h
+            off_x, off_y = g_off_x, g_off_y
+        else:
+            st.markdown(f"#### Box for **{img_name}** (row {idx})")
+            col1, col2 = st.columns(2)
+            box_w = col1.number_input("Width", 10, W, 400, key=f"bw_{key}")
+            box_h = col2.number_input("Height", 10, H, 200, key=f"bh_{key}")
+            col3, col4 = st.columns(2)
+            off_x = col3.number_input("Offset X", -W, W, 0, key=f"ox_{key}")
+            off_y = col4.number_input("Offset Y", -H, H, 0, key=f"oy_{key}")
 
-            # Draw text centered
-            heights = [font.getbbox(t)[3]-font.getbbox(t)[1] for t in wrapped]
-            tot_h   = sum(heights) + LINE_SPACING*(len(heights)-1)
-            y_cur   = box_y + (box_h - tot_h)//2
-            for h, line in zip(heights, wrapped):
-                x = box_x + (box_w - font.getlength(line))//2
-                draw.text((x, y_cur), line, fill=font_color, font=font)
-                y_cur += h + LINE_SPACING
+        box_x = (W - box_w) // 2 + off_x
+        box_y = (H - box_h) // 2 + off_y
 
-            if show_prev and (max_previews == 0 or shown < max_previews):
+        overlay = Image.new("RGBA", im.size, (0, 0, 0, 0))
+        odraw = ImageDraw.Draw(overlay)
+        odraw.rectangle(
+            [(box_x, box_y), (box_x + box_w, box_y + box_h)],
+            fill=(*ImageColor.getrgb(fill_color), fill_alpha),
+            outline=(*ImageColor.getrgb(outline_color), 255),
+            width=outline_width,
+        )
+        im = Image.alpha_composite(im, overlay)
+        draw = ImageDraw.Draw(im)
+
+        base_font, wrapped = wrap_and_fit(draw, FONT_PATH, box_w, box_h, txt_lines)
+        scaled_sz = max(MIN_FONT_SIZE, int(base_font.size * font_scale / 100))
+        font, wrapped = wrap_and_fit(draw, FONT_PATH, box_w, box_h, txt_lines, scaled_sz)
+
+        heights = [font.getbbox(t)[3] - font.getbbox(t)[1] for t in wrapped]
+        tot_h = sum(heights) + LINE_SPACING * (len(heights) - 1)
+        y_cur = box_y + (box_h - tot_h) // 2
+        for h, line in zip(heights, wrapped):
+            x = box_x + (box_w - font.getlength(line)) // 2
+            draw.text((x, y_cur), line, fill=font_color, font=font)
+            y_cur += h + LINE_SPACING
+
+        if show_prev and (max_previews == 0 or shown < max_previews):
+            col1, col2 = st.columns(2)
+            with (col1 if shown % 2 == 0 else col2):
                 st.image(im.convert("RGB"), caption=f"{img_name} (row {idx})", use_column_width=True)
-                shown += 1
+            shown += 1
 
-            if zip_out:
-                reuse_cnt[img_name] = reuse_cnt.get(img_name, 0) + 1
-                suf = f"_{reuse_cnt[img_name]}" if reuse_cnt[img_name] > 1 else ""
-                buf = io.BytesIO()
-                im.save(buf, format="PNG")
-                with zipfile.ZipFile(zip_buffer, "a") as zf:
-                    zf.writestr(os.path.splitext(img_name)[0] + suf + ".png", buf.getvalue())
+        if zip_out:
+            reuse_cnt[img_name] = reuse_cnt.get(img_name, 0) + 1
+            suf = f"_{reuse_cnt[img_name]}" if reuse_cnt[img_name] > 1 else ""
+            buf = io.BytesIO()
+            im.save(buf, format="PNG")
+            with zipfile.ZipFile(zip_buffer, "a") as zf:
+                zf.writestr(os.path.splitext(img_name)[0] + suf + ".png", buf.getvalue())
 
-        if zip_out and zip_buffer.getvalue():
-            st.download_button("📦 Download ZIP", zip_buffer.getvalue(), "captioned_images.zip")
+    if zip_out and zip_buffer.getvalue():
+        st.success("✅ All images processed!")
+        st.download_button("📦 Download ZIP", zip_buffer.getvalue(), "captioned_images.zip")
 
-    except Exception as e:
-        st.error(f"❌ Error: {e}")
+except Exception as e:
+    st.error(f"❌ Something went wrong:\n\n{e}")
