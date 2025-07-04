@@ -1,164 +1,165 @@
-import os
-import io
-import zipfile
+import io, os, zipfile
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont, ImageColor
 import streamlit as st
 
-# === Constants ===
-FONT_PATH = "font/arial.ttf"
-MAX_FONT_SIZE = 120
-MIN_FONT_SIZE = 10
+# ── CONSTANTS ──────────────────────────────────────────────────────────────────
+FONT_PATH        = "font/arial.ttf"       # put any .ttf you prefer in /font
+MAX_FONT_SIZE    = 120
+MIN_FONT_SIZE    = 10
+LINE_SPACING_PX  = 10                     # gap between wrapped lines
 
-# === Page Setup ===
-st.set_page_config(page_title="Bulk Captioner (Pixels)", layout="centered")
-st.title("🖼️ Bulk Image Captioner (Pixel Placement + Overlay Control)")
+# ── PAGE SET‑UP ────────────────────────────────────────────────────────────────
+st.set_page_config(page_title="Bulk Captioner (Pixels + Center + Offset)",
+                   layout="centered")
+st.title("🖼️ Bulk Image Captioner – Centred Box + Offset + Font Scale")
+st.write(
+    "Upload an Excel/CSV with **Image Filename** + up to **Text Line 1‑4**.  "
+    "Choose box size, optional pixel offsets, overlay colours & font scale. "
+    "Text auto‑wraps and fits the box."
+)
 
-st.write("Upload your caption file and images. Text automatically wraps and fits into a custom box (position and size in pixels).")
+# ── FILE UPLOADS ───────────────────────────────────────────────────────────────
+cap_file        = st.file_uploader("📄  Captions (Excel or CSV)", ["csv", "xlsx"])
+uploaded_images = st.file_uploader("🖼  Images (JPG/PNG)",  ["jpg", "jpeg", "png"],
+                                   accept_multiple_files=True)
 
-# === Upload Inputs ===
-file = st.file_uploader("📄 Upload Excel or CSV", type=["csv", "xlsx"])
-uploaded_images = st.file_uploader("🖼️ Upload Images", accept_multiple_files=True, type=["jpg", "jpeg", "png"])
+# ── GLOBAL VISUAL OPTIONS ──────────────────────────────────────────────────────
+st.markdown("### 🎨 Overlay Box & Font")
+overlay_fill_color  = st.color_picker("Fill Colour",    "#000000")
+overlay_fill_alpha  = st.slider     ("Fill Transparency (0 = clear, 255 = solid)",
+                                     0, 255, 100)
+outline_color       = st.color_picker("Outline Colour", "#FFFFFF")
+outline_width       = st.slider     ("Outline Width (px)", 0, 10, 2)
+font_color          = st.color_picker("Font Colour",   "#FFFFFF")
+font_scale_pct      = st.slider("🔠 Font Scale (%)", 80, 200, 100)
 
-# === UI Options ===
-font_color = st.color_picker("🔤 Font Color", "#FFFFFF")
-show_previews = st.checkbox("👁 Show Previews", True)
-enable_download = st.checkbox("💾 Enable ZIP Download", True)
+show_previews  = st.checkbox("👁 Show Previews", True)
+enable_zip     = st.checkbox("💾 Enable ZIP Download", True)
 
-# === Overlay Box Styling ===
-st.markdown("### 🎨 Overlay Box Styling")
-overlay_fill_color = st.color_picker("🟦 Fill Color", "#000000")
-overlay_fill_alpha = st.slider("📊 Fill Transparency (0=clear, 255=solid)", 0, 255, 100)
-outline_color = st.color_picker("⬜ Outline Color", "#FFFFFF")
-outline_width = st.slider("📏 Outline Width", 0, 10, 2)
-
-# === Auto-Fit Text ===
-def wrap_text_to_box(draw, font_path, box_width, box_height, raw_lines, max_font=MAX_FONT_SIZE, min_font=MIN_FONT_SIZE):
-    for font_size in range(max_font, min_font - 1, -2):
-        try:
-            font = ImageFont.truetype(font_path, font_size)
-        except:
-            font = ImageFont.load_default()
-
-        wrapped_lines = []
-        total_height = 0
-        max_line_width = 0
-        line_spacing = 10
-
-        for raw_line in raw_lines:
-            if not raw_line.strip():
-                continue
-            words = raw_line.strip().split()
-            current_line = ""
-            for word in words:
-                test_line = f"{current_line} {word}".strip()
-                if font.getlength(test_line) <= box_width:
-                    current_line = test_line
+# ── TEXT‑FIT FUNCTION ──────────────────────────────────────────────────────────
+def wrap_and_fit(draw, font_path, box_w, box_h, raw_lines,
+                 max_size, min_size=MIN_FONT_SIZE):
+    """Return (font_object, wrapped_lines) that fit inside box (pixel)."""
+    for size in range(max_size, min_size - 1, -2):
+        try:  font = ImageFont.truetype(font_path, size)
+        except: font = ImageFont.load_default()
+        wrapped, tot_h, max_w = [], 0, 0
+        for raw in raw_lines:
+            if not raw.strip():  continue
+            words, cur = raw.split(), ""
+            for w in words:
+                test = f"{cur} {w}".strip()
+                if font.getlength(test) <= box_w:
+                    cur = test
                 else:
-                    wrapped_lines.append(current_line)
-                    total_height += font.getbbox(current_line)[3] - font.getbbox(current_line)[1] + line_spacing
-                    max_line_width = max(max_line_width, font.getlength(current_line))
-                    current_line = word
-            if current_line:
-                wrapped_lines.append(current_line)
-                total_height += font.getbbox(current_line)[3] - font.getbbox(current_line)[1] + line_spacing
-                max_line_width = max(max_line_width, font.getlength(current_line))
+                    wrapped.append(cur)
+                    tot_h += font.getbbox(cur)[3] - font.getbbox(cur)[1] + LINE_SPACING_PX
+                    max_w = max(max_w, font.getlength(cur))
+                    cur = w
+            if cur:
+                wrapped.append(cur)
+                tot_h += font.getbbox(cur)[3] - font.getbbox(cur)[1] + LINE_SPACING_PX
+                max_w = max(max_w, font.getlength(cur))
+        if wrapped and tot_h - LINE_SPACING_PX <= box_h and max_w <= box_w:
+            return font, wrapped
+    return font, wrapped  # minimal size fallback
 
-        if total_height <= box_height and max_line_width <= box_width:
-            return font, wrapped_lines
-
-    return font, wrapped_lines
-
-# === Main Logic ===
-if file and uploaded_images:
+# ── MAIN PROCESSING ────────────────────────────────────────────────────────────
+if cap_file and uploaded_images:
     try:
-        # Load caption data
-        if file.name.endswith(".csv"):
-            df = pd.read_csv(file)
-        else:
-            df = pd.read_excel(file)
-        df = df.fillna("")  # Handle NaN values
+        df = (pd.read_csv(cap_file) if cap_file.name.endswith(".csv")
+              else pd.read_excel(cap_file)).fillna("")
 
-        if 'Image Filename' not in df.columns:
-            st.error("❌ Missing column: 'Image Filename'")
-            st.stop()
+        assert "Image Filename" in df.columns, "Column 'Image Filename' missing."
 
-        image_dict = {img.name: img for img in uploaded_images}
-        output_zip = io.BytesIO()
-        image_counts = {}
+        img_dict = {img.name: img for img in uploaded_images}
+        zip_buffer = io.BytesIO()
+        reuse_counter = {}
 
-        for idx, row in df.iterrows():
-            img_name = row['Image Filename']
-            if img_name not in image_dict:
-                st.warning(f"⚠️ Missing image: {img_name}")
+        for _, row in df.iterrows():
+            img_name = row["Image Filename"]
+            if img_name not in img_dict:
+                st.warning(f"⚠ Image not uploaded: {img_name}")
                 continue
 
-            image_counts[img_name] = image_counts.get(img_name, 0) + 1
-            suffix = f"_{image_counts[img_name]}" if image_counts[img_name] > 1 else ""
+            # ► Collect caption lines
+            lines = [str(row.get(f"Text Line {n}", "")) for n in range(1, 5)]
+            lines = [l for l in lines if l.strip()]
 
-            text_lines = [
-                str(row.get("Text Line 1", "")),
-                str(row.get("Text Line 2", "")),
-                str(row.get("Text Line 3", "")),
-                str(row.get("Text Line 4", "")),
-            ]
-            text_lines = [line for line in text_lines if line.strip()]
+            # ► Open image & dimensions
+            im  = Image.open(img_dict[img_name]).convert("RGBA")
+            W, H = im.size
 
-            # Load and prepare image
-            img = Image.open(image_dict[img_name]).convert("RGBA")
-            W, H = img.size
-            draw = ImageDraw.Draw(img)
+            # ► Box size controls (per‑image)
+            st.markdown(f"### 📐 Box for **{img_name}** ({W}×{H}px)")
+            box_w = st.number_input(f"Width (px) – {img_name}", 10, W, 400,
+                                    key=f"bw_{img_name}")
+            box_h = st.number_input(f"Height (px) – {img_name}", 10, H, 200,
+                                    key=f"bh_{img_name}")
+            x_offset = st.number_input(f"X Offset (px, +right / ‑left) – {img_name}",
+                                       -W, W, 0, key=f"ox_{img_name}")
+            y_offset = st.number_input(f"Y Offset (px, +down / ‑up) – {img_name}",
+                                       -H, H, 0, key=f"oy_{img_name}")
 
-            st.markdown(f"### 🖼️ Controls for {img_name}")
-            box_x = st.number_input(f"↔ Left Offset (px) - {img_name}", min_value=0, max_value=W, value=100, key=f"x_{img_name}")
-            box_y = st.number_input(f"↕ Top Offset (px) - {img_name}", min_value=0, max_value=H, value=100, key=f"y_{img_name}")
-            box_w = st.number_input(f"🔳 Width (px) - {img_name}", min_value=10, max_value=W, value=400, key=f"w_{img_name}")
-            box_h = st.number_input(f"🔳 Height (px) - {img_name}", min_value=10, max_value=H, value=200, key=f"h_{img_name}")
+            # ► Centre + offset
+            box_x = (W - box_w)//2 + x_offset
+            box_y = (H - box_h)//2 + y_offset
 
-            # === Draw overlay box
-            overlay = Image.new('RGBA', img.size, (255, 255, 255, 0))
-            overlay_draw = ImageDraw.Draw(overlay)
-
-            fill_rgb = ImageColor.getrgb(overlay_fill_color)
-            outline_rgb = ImageColor.getrgb(outline_color)
-
-            overlay_draw.rectangle(
-                [(box_x, box_y), (box_x + box_w, box_y + box_h)],
+            # ► Draw overlay box
+            fill_rgb, out_rgb = map(ImageColor.getrgb,
+                                    [overlay_fill_color, outline_color])
+            overlay = Image.new("RGBA", im.size, (0,0,0,0))
+            odraw   = ImageDraw.Draw(overlay)
+            odraw.rectangle(
+                [(box_x, box_y), (box_x+box_w, box_y+box_h)],
                 fill=(*fill_rgb, overlay_fill_alpha),
-                outline=(*outline_rgb, 255),
+                outline=(*out_rgb, 255),
                 width=outline_width
             )
+            im = Image.alpha_composite(im, overlay)
+            draw = ImageDraw.Draw(im)
 
-            img = Image.alpha_composite(img, overlay)
-            draw = ImageDraw.Draw(img)
+            # ► Auto‑fit base size
+            base_font, wrapped = wrap_and_fit(
+                draw, FONT_PATH, box_w, box_h, lines, MAX_FONT_SIZE
+            )
 
-            # === Fit and draw text
-            font, wrapped_lines = wrap_text_to_box(draw, FONT_PATH, box_w, box_h, text_lines)
+            # ► Apply user font‑scale (try bigger/smaller but keep fit)
+            scaled_size = max(MIN_FONT_SIZE,
+                              int(base_font.size * font_scale_pct/100))
+            font, wrapped = wrap_and_fit(
+                draw, FONT_PATH, box_w, box_h, lines,
+                max_size=scaled_size, min_size=MIN_FONT_SIZE
+            )
 
-            line_spacing = 10
-            line_heights = [font.getbbox(line)[3] - font.getbbox(line)[1] for line in wrapped_lines]
-            total_height = sum(line_heights) + line_spacing * (len(wrapped_lines) - 1)
-            y_cursor = box_y + (box_h - total_height) / 2
+            # ► Vertical centring
+            lh = [font.getbbox(t)[3]-font.getbbox(t)[1] for t in wrapped]
+            total_h = sum(lh) + LINE_SPACING_PX*(len(lh)-1)
+            y_cursor = box_y + (box_h - total_h)//2
 
-            for i, line in enumerate(wrapped_lines):
-                line_width = font.getlength(line)
-                x = box_x + (box_w - line_width) / 2
-                draw.text((x, y_cursor), line, fill=font_color, font=font)
-                y_cursor += line_heights[i] + line_spacing
+            for idx, t in enumerate(wrapped):
+                x = box_x + (box_w - font.getlength(t))//2
+                draw.text((x, y_cursor), t, fill=font_color, font=font)
+                y_cursor += lh[idx] + LINE_SPACING_PX
 
+            # ► Preview
             if show_previews:
-                st.image(img.convert("RGB"), caption=f"{img_name}{suffix}", use_column_width=True)
+                st.image(im.convert("RGB"), caption=img_name, use_column_width=True)
 
-            if enable_download:
-                with zipfile.ZipFile(output_zip, 'a') as zipf:
-                    outname = os.path.splitext(img_name)[0] + f"{suffix}.png"
+            # ► ZIP save
+            if enable_zip:
+                reuse_counter[img_name] = reuse_counter.get(img_name, 0) + 1
+                suffix = f"_{reuse_counter[img_name]}" if reuse_counter[img_name]>1 else ""
+                with zipfile.ZipFile(zip_buffer, "a") as zf:
                     buf = io.BytesIO()
-                    img.save(buf, format="PNG")
-                    zipf.writestr(outname, buf.getvalue())
+                    im.save(buf, format="PNG")
+                    zf.writestr(os.path.splitext(img_name)[0]+suffix+".png",
+                                buf.getvalue())
 
-        if enable_download:
-            st.success("✅ All images processed.")
-            st.download_button("📥 Download ZIP", output_zip.getvalue(), file_name="captioned_images.zip")
+        if enable_zip and zip_buffer.getvalue():
+            st.download_button("📥 Download ZIP", zip_buffer.getvalue(),
+                               "captioned_images.zip")
 
     except Exception as e:
-        st.error(f"❌ Error: {e}")
+        st.error(f"❌ Error → {e}")
