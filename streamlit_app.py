@@ -147,8 +147,8 @@ try:
         else:
             st.markdown(f"#### Box for **{img_name}** (row {idx})")
             col1, col2 = st.columns(2)
-            box_w = col1.number_input("Width", 10, W, 800, key=f"bw_{key}")
-            box_h = col2.number_input("Height", 10, H, 500, key=f"bh_{key}")
+            box_w = col1.number_input("Width", 10, W, 400, key=f"bw_{key}")
+            box_h = col2.number_input("Height", 10, H, 200, key=f"bh_{key}")
             col3, col4 = st.columns(2)
             off_x = col3.number_input("Offset X", -W, W, 0, key=f"ox_{key}")
             off_y = col4.number_input("Offset Y", -H, H, 0, key=f"oy_{key}")
