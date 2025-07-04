@@ -59,8 +59,8 @@ with st.sidebar:
 
     st.header("📦 Global Box")
     use_global_box = st.checkbox("Use same box for all images", True)
-    g_box_w  = st.number_input("Box Width (px)",  10, 2000, 400)
-    g_box_h  = st.number_input("Box Height (px)", 10, 2000, 200)
+    g_box_w  = st.number_input("Box Width (px)",  10, 2000, 800)
+    g_box_h  = st.number_input("Box Height (px)", 10, 2000, 500)
     g_off_x  = st.number_input("X Offset (±px)", -2000, 2000, 0)
     g_off_y  = st.number_input("Y Offset (±px)", -2000, 2000, 0)
 
