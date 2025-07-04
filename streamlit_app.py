@@ -34,17 +34,26 @@ font_color = st.color_picker("🎨 Font Color", "#FFFFFF")
 font_scale_pct = st.slider("🔡 Font Scale (%)", 80, 200, 100)
 
 # ── OVERLAY BOX STYLING ─────────────────────────────────────
-st.markdown("### 🖌️ Overlay Box")
+st.markdown("### 🖌️ Overlay Box Styling")
 
 overlay_fill_color = st.color_picker("🟦 Box Fill Color", "#000000")
 overlay_fill_alpha = st.slider("📊 Box Fill Transparency (0=clear, 255=solid)", 0, 255, 100)
 outline_color = st.color_picker("⬜ Box Outline Color", "#FFFFFF")
 outline_width = st.slider("📏 Outline Width (px)", 0, 10, 2)
 
+# ── GLOBAL BOX SETTINGS ─────────────────────────────────────
+st.markdown("### 📦 Global Box Settings")
+use_global_box = st.checkbox("✅ Use same box size & offset for all images", value=True)
+
+global_box_w = st.number_input("Global Box Width (px)", min_value=10, max_value=2000, value=400)
+global_box_h = st.number_input("Global Box Height (px)", min_value=10, max_value=2000, value=200)
+global_x_offset = st.number_input("Global X Offset (±px)", -2000, 2000, 0)
+global_y_offset = st.number_input("Global Y Offset (±px)", -2000, 2000, 0)
+
 show_previews = st.checkbox("👁 Show Previews", True)
 enable_zip = st.checkbox("💾 Enable ZIP Download", True)
 
-# ── FIT TEXT TO BOX LOGIC ───────────────────────────────────
+# ── TEXT WRAP + FIT ─────────────────────────────────────────
 def wrap_and_fit(draw, font_path, box_w, box_h, raw_lines,
                  max_size, min_size=MIN_FONT_SIZE):
     for size in range(max_size, min_size - 1, -2):
@@ -75,7 +84,7 @@ def wrap_and_fit(draw, font_path, box_w, box_h, raw_lines,
             return font, wrapped
     return font, wrapped
 
-# ── MAIN LOGIC ───────────────────────────────────────────────
+# ── MAIN PROCESSING ─────────────────────────────────────────
 if cap_file and uploaded_images:
     try:
         df = pd.read_csv(cap_file) if cap_file.name.endswith(".csv") else pd.read_excel(cap_file)
@@ -95,27 +104,29 @@ if cap_file and uploaded_images:
                 st.warning(f"⚠️ Missing image: {img_name}")
                 continue
 
-            # Caption Lines
+            # Text lines
             lines = [str(row.get(f"Text Line {n}", "")) for n in range(1, 5)]
             lines = [line for line in lines if line.strip()]
 
             img = Image.open(image_dict[img_name]).convert("RGBA")
             W, H = img.size
-
-            # Unique widget key using image name + row index
             unique_key = f"{img_name}_{idx}"
 
-            st.markdown(f"### 🖼 Box for: {img_name} (row {idx}, {W}×{H})")
-            box_w = st.number_input(f"Box Width (px)", min_value=10, max_value=W, value=400, key=f"bw_{unique_key}")
-            box_h = st.number_input(f"Box Height (px)", min_value=10, max_value=H, value=200, key=f"bh_{unique_key}")
-            x_offset = st.number_input(f"X Offset (±px)", -W, W, 0, key=f"ox_{unique_key}")
-            y_offset = st.number_input(f"Y Offset (±px)", -H, H, 0, key=f"oy_{unique_key}")
+            if use_global_box:
+                box_w = global_box_w
+                box_h = global_box_h
+                x_offset = global_x_offset
+                y_offset = global_y_offset
+            else:
+                st.markdown(f"### 🖼 Box Settings for: {img_name} (row {idx}, {W}×{H})")
+                box_w = st.number_input("Box Width (px)", 10, W, 400, key=f"bw_{unique_key}")
+                box_h = st.number_input("Box Height (px)", 10, H, 200, key=f"bh_{unique_key}")
+                x_offset = st.number_input("X Offset (±px)", -W, W, 0, key=f"ox_{unique_key}")
+                y_offset = st.number_input("Y Offset (±px)", -H, H, 0, key=f"oy_{unique_key}")
 
-            # Center + Offset
             box_x = (W - box_w) // 2 + x_offset
             box_y = (H - box_h) // 2 + y_offset
 
-            # Draw overlay box
             overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
             odraw = ImageDraw.Draw(overlay)
             fill_rgb = ImageColor.getrgb(overlay_fill_color)
@@ -131,12 +142,10 @@ if cap_file and uploaded_images:
             img = Image.alpha_composite(img, overlay)
             draw = ImageDraw.Draw(img)
 
-            # Fit and scale text
             base_font, wrapped_lines = wrap_and_fit(draw, selected_font_path, box_w, box_h, lines, MAX_FONT_SIZE)
             scaled_size = max(MIN_FONT_SIZE, int(base_font.size * font_scale_pct / 100))
             font, wrapped_lines = wrap_and_fit(draw, selected_font_path, box_w, box_h, lines, scaled_size)
 
-            # Vertical centering
             line_heights = [font.getbbox(line)[3] - font.getbbox(line)[1] for line in wrapped_lines]
             total_text_height = sum(line_heights) + LINE_SPACING * (len(line_heights) - 1)
             y_cursor = box_y + (box_h - total_text_height) // 2
@@ -146,11 +155,9 @@ if cap_file and uploaded_images:
                 draw.text((x, y_cursor), line, fill=font_color, font=font)
                 y_cursor += line_heights[i] + LINE_SPACING
 
-            # Preview
             if show_previews:
                 st.image(img.convert("RGB"), caption=f"{img_name} (Row {idx})", use_column_width=True)
 
-            # Save to ZIP
             if enable_zip:
                 reuse_counts[img_name] = reuse_counts.get(img_name, 0) + 1
                 suffix = f"_{reuse_counts[img_name]}" if reuse_counts[img_name] > 1 else ""
