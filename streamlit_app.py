@@ -9,7 +9,7 @@ MIN_FONT_SIZE = 10
 LINE_SPACING = 10
 
 # ── PAGE SETUP ──────────────────────────────────────────────
-st.set_page_config(page_title="Bulk Captioner", layout="centered")
+st.set_page_config(page_title="Bulk Captioner", layout="wide")
 st.title("🖼️ Bulk Image Captioner")
 st.write(
     "Upload a CSV/Excel file and matching images. Overlay up to **4 lines** of "
@@ -50,10 +50,12 @@ with st.sidebar:
     g_off_x  = st.number_input("X Offset (±px)", -2000, 2000, 0)
     g_off_y  = st.number_input("Y Offset (±px)", -2000, 2000, 0)
 
-show_prev = st.checkbox("👁 Show Previews", True)
-zip_out   = st.checkbox("💾 Enable ZIP Download", True)
+    st.header("⚙️ Other Settings")
+    show_prev = st.checkbox("👁 Show Previews", True)
+    zip_out   = st.checkbox("💾 Enable ZIP Download", True)
+    max_previews = st.number_input("Max Image Previews (0=all)", 0, 100, 20)
 
-# ── TEXT WRAP / FIT ─────────────────────────────────────────
+# ── TEXT WRAP ────────────────────────────────────────────────
 def wrap_and_fit(draw, font_path, box_w, box_h, lines,
                  max_sz=MAX_FONT_SIZE, min_sz=MIN_FONT_SIZE):
     for sz in range(max_sz, min_sz - 1, -2):
@@ -84,7 +86,7 @@ def wrap_and_fit(draw, font_path, box_w, box_h, lines,
             return fnt, wrapped
     return fnt, wrapped  # fallback
 
-# ── MAIN PROCESSING ─────────────────────────────────────────
+# ── MAIN ─────────────────────────────────────────────────────
 if cap_file and uploaded_images:
     try:
         df = (pd.read_csv(cap_file) if cap_file.name.endswith(".csv")
@@ -97,6 +99,7 @@ if cap_file and uploaded_images:
         img_dict   = {img.name: img for img in uploaded_images}
         zip_buffer = io.BytesIO()
         reuse_cnt  = {}
+        shown      = 0
 
         for idx, row in df.iterrows():
             img_name = row["Image Filename"]
@@ -119,10 +122,12 @@ if cap_file and uploaded_images:
                 off_x, off_y = g_off_x, g_off_y
             else:
                 st.markdown(f"#### Box for **{img_name}** (row {idx})")
-                box_w = st.number_input("Width (px)",  10, W, 400, key=f"bw_{key}")
-                box_h = st.number_input("Height (px)", 10, H, 200, key=f"bh_{key}")
-                off_x = st.number_input("X Offset", -W, W, 0, key=f"ox_{key}")
-                off_y = st.number_input("Y Offset", -H, H, 0, key=f"oy_{key}")
+                col1, col2 = st.columns(2)
+                box_w = col1.number_input("Width", 10, W, 400, key=f"bw_{key}")
+                box_h = col2.number_input("Height", 10, H, 200, key=f"bh_{key}")
+                col3, col4 = st.columns(2)
+                off_x = col3.number_input("Offset X", -W, W, 0, key=f"ox_{key}")
+                off_y = col4.number_input("Offset Y", -H, H, 0, key=f"oy_{key}")
 
             box_x = (W - box_w) // 2 + off_x
             box_y = (H - box_h) // 2 + off_y
@@ -157,10 +162,10 @@ if cap_file and uploaded_images:
                 draw.text((x, y_cur), line, fill=font_color, font=font)
                 y_cur += h + LINE_SPACING
 
-            if show_prev:
+            if show_prev and (max_previews == 0 or shown < max_previews):
                 st.image(im.convert("RGB"), caption=f"{img_name} (row {idx})", use_column_width=True)
+                shown += 1
 
-            # Add to ZIP
             if zip_out:
                 reuse_cnt[img_name] = reuse_cnt.get(img_name, 0) + 1
                 suf = f"_{reuse_cnt[img_name]}" if reuse_cnt[img_name] > 1 else ""
