@@ -12,8 +12,7 @@ LINE_SPACING = 10
 st.set_page_config(page_title="Bulk Captioner", layout="wide")
 st.title("🖼️ Bulk Image Captioner")
 st.write(
-    "Upload a CSV/Excel file and matching images. Overlay up to **4 lines** of "
-    "text on each image with custom fonts, colors, box position, and styling. "
+    "Upload a CSV/Excel file + matching images."
     "Download all captioned images as a ZIP."
 )
 
