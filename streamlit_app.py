@@ -10,17 +10,17 @@ LINE_SPACING = 10
 
 # ── PAGE SETUP ──────────────────────────────────────────────
 st.set_page_config(page_title="Bulk Captioner", layout="centered")
-st.title("🖼️ Bulk Image Captioner (with Font Picker + Centered Box + Offsets)")
-st.write("Upload captions + images, auto-caption with 1–4 lines of text, fully styled and downloadable.")
+st.title("🖼️ Bulk Image Captioner")
+st.write("Upload captions + images. Auto-caption with 1–4 lines of text, custom fonts, box position, colors, ZIP download.")
 
 # ── FILE UPLOADS ─────────────────────────────────────────────
 cap_file = st.file_uploader("📄 Captions (CSV or Excel)", ["csv", "xlsx"])
 uploaded_images = st.file_uploader("🖼️ Upload Images (JPG/PNG)", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
 
 # ── FONT PICKER ─────────────────────────────────────────────
-st.markdown("### 🔠 Font and Overlay Styling")
+st.markdown("### 🔠 Font and Styling")
 
-# Dynamically list fonts from /font/
+# Detect font files in /font
 font_files = glob.glob("font/*.ttf") + glob.glob("font/*.otf")
 font_options = {os.path.basename(f): f for f in font_files}
 if not font_options:
@@ -89,7 +89,7 @@ if cap_file and uploaded_images:
         zip_buffer = io.BytesIO()
         reuse_counts = {}
 
-        for _, row in df.iterrows():
+        for idx, row in df.iterrows():
             img_name = row["Image Filename"]
             if img_name not in image_dict:
                 st.warning(f"⚠️ Missing image: {img_name}")
@@ -102,11 +102,14 @@ if cap_file and uploaded_images:
             img = Image.open(image_dict[img_name]).convert("RGBA")
             W, H = img.size
 
-            st.markdown(f"### 🖼 Box for: {img_name} ({W}×{H})")
-            box_w = st.number_input(f"Box Width (px) – {img_name}", min_value=10, max_value=W, value=400, key=f"bw_{img_name}")
-            box_h = st.number_input(f"Box Height (px) – {img_name}", min_value=10, max_value=H, value=200, key=f"bh_{img_name}")
-            x_offset = st.number_input(f"X Offset (±px) – {img_name}", -W, W, 0, key=f"ox_{img_name}")
-            y_offset = st.number_input(f"Y Offset (±px) – {img_name}", -H, H, 0, key=f"oy_{img_name}")
+            # Unique widget key using image name + row index
+            unique_key = f"{img_name}_{idx}"
+
+            st.markdown(f"### 🖼 Box for: {img_name} (row {idx}, {W}×{H})")
+            box_w = st.number_input(f"Box Width (px)", min_value=10, max_value=W, value=400, key=f"bw_{unique_key}")
+            box_h = st.number_input(f"Box Height (px)", min_value=10, max_value=H, value=200, key=f"bh_{unique_key}")
+            x_offset = st.number_input(f"X Offset (±px)", -W, W, 0, key=f"ox_{unique_key}")
+            y_offset = st.number_input(f"Y Offset (±px)", -H, H, 0, key=f"oy_{unique_key}")
 
             # Center + Offset
             box_x = (W - box_w) // 2 + x_offset
@@ -145,7 +148,7 @@ if cap_file and uploaded_images:
 
             # Preview
             if show_previews:
-                st.image(img.convert("RGB"), caption=img_name, use_column_width=True)
+                st.image(img.convert("RGB"), caption=f"{img_name} (Row {idx})", use_column_width=True)
 
             # Save to ZIP
             if enable_zip:
