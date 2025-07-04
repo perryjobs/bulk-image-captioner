@@ -15,11 +15,32 @@ st.write(
     "Upload a CSV/Excel file + matching images. Download all captioned images as a ZIP."
 )
 
-# ── FILE UPLOADS ─────────────────────────────────────────────
-cap_file        = st.file_uploader("📄 Captions (CSV or Excel)", ["csv", "xlsx"])
-uploaded_images = st.file_uploader(
-    "🖼️ Upload Images (JPG/PNG)", type=["jpg", "jpeg", "png"], accept_multiple_files=True
-)
+# ── CUSTOM HOMEPAGE FOR MOBILE ───────────────────────────────
+with st.expander("📘 How This Works", expanded=True):
+    st.markdown("""
+    **👋 Welcome to Bulk Image Captioner!**
+
+    Easily overlay custom text on multiple images using a CSV or Excel file.
+
+    **Steps:**
+    1. Upload your caption file
+    2. Upload matching images (JPEG or PNG)
+    3. Use the sidebar to set fonts, colors, and overlay box settings
+    4. Preview & download your captioned images in a ZIP file
+
+    > ✅ Ideal for flyers, event posters, batch quotes, and branding images.
+
+    ---
+    """)
+
+st.subheader("📤 Upload Your Files")
+cap_file = st.file_uploader("📝 Caption File (.csv or .xlsx)", type=["csv", "xlsx"])
+uploaded_images = st.file_uploader("🖼️ Image Files (JPG/PNG)", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
+
+# Show reminder if missing
+if not cap_file or not uploaded_images:
+    st.warning("⏳ Upload both a caption file and matching images to begin...")
+
 
 # ── SIDEBAR : Font, Overlay, Global Box ─────────────────────
 with st.sidebar:
