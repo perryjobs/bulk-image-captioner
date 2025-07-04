@@ -6,12 +6,12 @@ import streamlit as st
 # ── CONSTANTS ───────────────────────────────────────────────
 MAX_FONT_SIZE = 120
 MIN_FONT_SIZE = 10
-LINE_SPACING = 10
+LINE_SPACING = 12
 
 # ── PAGE SETUP ──────────────────────────────────────────────
 st.set_page_config(page_title="Bulk Captioner", layout="centered")
 st.title("🖼️ Bulk Image Captioner")
-st.write("Upload captions + images. Auto-caption with 1–4 lines of text, custom fonts, box position, colors, ZIP download.")
+st.write("Upload captions + images. ZIP download.")
 
 # ── FILE UPLOADS ─────────────────────────────────────────────
 cap_file = st.file_uploader("📄 Captions (CSV or Excel)", ["csv", "xlsx"])
@@ -45,8 +45,8 @@ outline_width = st.slider("📏 Outline Width (px)", 0, 10, 2)
 st.markdown("### 📦 Global Box Settings")
 use_global_box = st.checkbox("✅ Use same box size & offset for all images", value=True)
 
-global_box_w = st.number_input("Global Box Width (px)", min_value=10, max_value=2000, value=400)
-global_box_h = st.number_input("Global Box Height (px)", min_value=10, max_value=2000, value=200)
+global_box_w = st.number_input("Global Box Width (px)", min_value=10, max_value=2000, value=800)
+global_box_h = st.number_input("Global Box Height (px)", min_value=10, max_value=2000, value=500)
 global_x_offset = st.number_input("Global X Offset (±px)", -2000, 2000, 0)
 global_y_offset = st.number_input("Global Y Offset (±px)", -2000, 2000, 0)
 
